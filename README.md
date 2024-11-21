@@ -111,6 +111,19 @@ Get detailed insights and answers related to the PDF content.
 ## Hugging Face Deployment:
 The application is deployed on Hugging Face Spaces, making it accessible to users for seamless interaction. You can access the live demo of the PDF chat application and try it out directly by visiting the link below:
 
+## Results:
+The application successfully allows users to extract content from uploaded PDF files, provides concise summaries of the content, and enables detailed question-and-answer interaction. This functionality is powered by the pre-trained LLaMA 3.1 model, ensuring accurate and contextually relevant responses.
+
+### Screenshots:
+- **Uploaded PDF Content Summarization:**
+  The application processes the uploaded PDF and generates a structured summary of its contents, making it easy for users to understand key points at a glance.
+  ![Screenshot 2024-11-21 181931](https://github.com/user-attachments/assets/5b1aa773-adc6-4e97-874d-73ce1a908c49)
+  
+- **Q&A with Extracted Content:**
+  Users can ask specific questions about the PDF's content, and the app provides detailed, context-aware answers based on the extracted text.
+  ![Screenshot 2024-11-21 181944](https://github.com/user-attachments/assets/1aa605ae-4249-41af-897e-d065e1428f18)
+
+
 - [Chat with PDF using LLaMA 3.1 on Hugging Face](https://huggingface.co/spaces/Anuj02003/Chat_with_pdf_using_llama3.1)
   
 This deployment allows users to upload PDFs, generate summaries, and interact with the content via a question-answering system powered by the LLaMA 3.1 model. It's designed to be user-friendly and demonstrates the capabilities of the model in a practical setting.
