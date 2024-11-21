@@ -1,15 +1,28 @@
 import streamlit as st
-import ollama
-import fitz
-import os
+from transformers import pipeline
+import fitz  # PyMuPDF for PDF handling
+import re
+import tempfile
 
-# Function to extract text from PDF
+# Function to clean extracted text
+def clean_text(text):
+    # Replace multiple spaces or newlines with a single space
+    text = re.sub(r'\s+', ' ', text)
+    return text.strip()
+
+# Function to extract text from PDF and clean it
 def extract_text_from_pdf(uploaded_file):
-    doc = fitz.open(uploaded_file)
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        tmp_file_path = tmp_file.name
+
+    doc = fitz.open(tmp_file_path)
     text = ""
     for page in doc:
         text += page.get_text()
-    return text
+    doc.close()
+
+    return clean_text(text)
 
 # Function to chunk large text for context
 def chunk_text(text, max_length=1000):
@@ -17,74 +30,59 @@ def chunk_text(text, max_length=1000):
     chunks = [text[i:i+max_length] for i in range(0, len(text), max_length)]
     return chunks
 
-def save_uploaded_file(uploaded_file):
-    # Get the current working directory
-    save_path = os.getcwd()
-    # Create the full path for the file
-    file_path = os.path.join(save_path, uploaded_file.name)
-    
-    # Save the file
-    with open(file_path, "wb") as f:
-        f.write(uploaded_file.getbuffer())
-        
-    return st.success(f"Saved file: {uploaded_file.name} to {save_path}")
+# Initialize Hugging Face model pipeline
+@st.cache_resource
+def load_model():
+    return pipeline("text-generation", model="gpt2", clean_up_tokenization_spaces=True)  # Use GPT-2 for simplicity
 
+model_pipeline = load_model()
+
+# Generate a response
+# Generate a response
+def get_response(prompt, context):
+    combined_prompt = f"Context: {context}\n\nQuestion: {prompt}\nAnswer:"
+    response = model_pipeline(
+        combined_prompt,
+        max_new_tokens=150,  # Ensure concise answers
+        num_return_sequences=1
+    )
+    # Extract only the answer part after the "Answer:" in the generated response
+    raw_response = response[0]["generated_text"]
+    answer_start = raw_response.find("Answer:") + len("Answer:")
+    answer = raw_response[answer_start:].strip()
+    return clean_text(answer)
+
+
+# Streamlit App UI
 st.title("Chat with PDF!!!")
 
-# Slider for description
-st.subheader("How to Use This Application:")
-st.slider(
-    "Slide to explore the usage description", 
-    min_value=0, max_value=100, step=1, value=50
-)
-
-# Displaying detailed description and instructions
-st.markdown("""
-    ### Welcome to the 'Chat with PDF' Application!
-
-    **Description**:  
-    This web application allows you to interact with the contents of a PDF document by uploading a file and asking questions about it. The application processes the uploaded PDF, extracts the text, and uses a powerful Large Language Model (LLM) to respond to your questions in real time.
-
-    **Model Used**:  
-    The application leverages the **Ollama LLM** (specifically `llama3.1` model), which is capable of understanding the text from the PDF and providing answers. The model is fine-tuned to handle natural language processing tasks and is adept at working with both short and long texts.
-
-    **How It Works**:
+# Sidebar for description
+st.sidebar.title("Instructions")
+st.sidebar.markdown("""
+    ### How to Use This Application:
     1. **Upload a PDF File**:  
        Use the file uploader to select and upload the PDF file you wish to analyze. The file should be in `.pdf` format.
     
     2. **Text Extraction**:  
-       The application extracts the text from the uploaded PDF using the `PyMuPDF` library (imported as `fitz`). This library enables the reading and extraction of text from each page in the PDF.
-    
+       The application extracts the text from the uploaded PDF using the `PyMuPDF` library (imported as `fitz`).
+
     3. **Text Chunking**:  
-       The extracted text may be very large, so it is divided into smaller chunks to facilitate better processing. By default, each chunk contains up to 1000 characters. These chunks serve as context for answering questions.
-    
+       Large documents are divided into smaller chunks for better processing. Each chunk contains up to 1000 characters.
+
     4. **Ask Questions**:  
-       After the text is processed and chunked, you can ask questions related to the content of the PDF. Simply type your question in the text area provided on the app.
-    
+       After the text is processed, type your question about the document.
+
     5. **Model Response**:  
-       When you ask a question, the app sends the prompt (your question) along with the relevant chunk of text to the `llama3.1` model. The model then generates a response based on the content it was provided. The response is displayed in the app.
-    
+       The app sends the prompt and the relevant chunk to the model, which generates a response based on the content.
+
     6. **Receive Insights**:  
-       The answers are tailored to the content of the PDF, providing detailed, context-specific insights to help you better understand the document.
-
-    **Features**:
-    - Upload any PDF document for analysis.
-    - Ask natural language questions based on the document's content.
-    - Get accurate and context-aware responses generated by a state-of-the-art LLM.
-    - Split large documents into manageable chunks for optimal performance.
-
-    **Why Use This App?**
-    - If you're reading a long PDF and need quick answers, this tool can assist by summarizing sections of the document or directly answering your specific questions.
-    - Useful for academic research, legal documents, technical papers, or any lengthy PDF content that needs to be understood quickly.
-    
-    **Try it now** and start chatting with your PDF to gain insights faster and more efficiently!
+       Get detailed insights and answers related to the PDF content.
 """)
 
 uploaded_file = st.file_uploader("Choose a PDF file", type=["pdf"])
 
 if uploaded_file is not None:
-    save_uploaded_file(uploaded_file)
-    # Extract text from the uploaded PDF
+    # Extract and clean text from the uploaded PDF
     pdf_text = extract_text_from_pdf(uploaded_file)
     
     # Chunk the extracted text
@@ -100,8 +98,17 @@ if uploaded_file is not None:
     
     if button:
         if prompt:
-            # Select a chunk of text to send with the prompt
-            chunk_to_send = text_chunks[0]  # You could select based on user's query
-            combined_prompt = f"Based on the following content: {chunk_to_send}\n\nQuestions: {prompt}"
-            response = ollama.generate(model="llama3.1", prompt=combined_prompt)
-            st.markdown(response["response"])
+            # Select relevant chunk based on the question
+            relevant_chunk = None
+            for chunk in text_chunks:
+                if any(keyword.lower() in chunk.lower() for keyword in prompt.split()):
+                    relevant_chunk = chunk
+                    break
+
+            # If no relevant chunk was found, use the first chunk as a fallback
+            if not relevant_chunk:
+                relevant_chunk = text_chunks[0]
+
+            # Get response from the model
+            response = get_response(prompt, relevant_chunk)
+            st.markdown(f"**Answer:** {response}")
