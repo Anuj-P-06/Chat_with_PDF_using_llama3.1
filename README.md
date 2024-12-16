@@ -1,4 +1,4 @@
-# Chat with PDF using LLaMA 3.1
+# Chat with PDF
 
 ## Table of Contents
 - [Project Overview.](#project-overview)
